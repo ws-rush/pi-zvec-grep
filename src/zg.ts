@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { join, resolve, win32 } from "node:path";
 
 export const DEFAULT_LIMIT = 8;
 export const MAX_LIMIT = 50;
@@ -288,6 +289,25 @@ export function buildIndexArgs(input: ZgIndexInput = {}): string[] {
   ];
 }
 
+export function resolveZgCommand(
+  platform: string = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  execPath: string = process.execPath,
+  checkExists: (path: string) => boolean = existsSync,
+): { command: string; prefixArgs: string[] } {
+  if (platform === "win32") {
+    const pathJoin = platform === "win32" ? win32.join : join;
+    const roots: string[] = [];
+    if (env.APPDATA) roots.push(env.APPDATA);
+    if (env.USERPROFILE) roots.push(pathJoin(env.USERPROFILE, "AppData", "Roaming"));
+    for (const root of roots) {
+      const cli = pathJoin(root, "npm", "node_modules", "@zvec", "zvec-grep", "dist", "cli", "index.js");
+      if (checkExists(cli)) return { command: execPath, prefixArgs: [cli] };
+    }
+  }
+  return { command: "zg", prefixArgs: [] };
+}
+
 async function runZg(
   execute: ZgExec,
   args: string[],
@@ -298,7 +318,8 @@ async function runZg(
   let result: ZgExecResult;
 
   try {
-    result = await execute("zg", args, { cwd: root, signal, timeout: 600_000 });
+    const zgLaunch = resolveZgCommand();
+    result = await execute(zgLaunch.command, [...zgLaunch.prefixArgs, ...args], { cwd: root, signal, timeout: 600_000 });
   } catch (error) {
     throw new Error(
       `Unable to run zg. Install it with \`npm install -g @zvec/zvec-grep\`. ${error instanceof Error ? error.message : String(error)}`,

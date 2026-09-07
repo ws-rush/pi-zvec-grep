@@ -8,6 +8,7 @@ import {
   indexZg,
   parseRgCommand,
   resolveRoot,
+  resolveZgCommand,
   rgZg,
   searchZg,
   statusZg,
@@ -121,7 +122,8 @@ test("searchZg executes zg query in the selected workspace", async () => {
     "/work/repo",
   );
 
-  assert.deepEqual(calls, [["zg", ["query", "--mode", "direct", "theme persistence", "--limit", "3"], {
+  const zgLaunch = resolveZgCommand();
+  assert.deepEqual(calls, [[zgLaunch.command, [...zgLaunch.prefixArgs, "query", "--mode", "direct", "theme persistence", "--limit", "3"], {
     cwd: "/work/repo/app", signal: undefined, timeout: 600_000,
   }]]);
   assert.equal(result.output, "freshness: fresh\nsrc/theme.ts:12");
@@ -138,7 +140,8 @@ test("rgZg keeps managed rg exhaustive unless the caller requested head", async 
     "/work/repo",
   );
 
-  assert.deepEqual(calls[0]?.[1], ["query", "--mode", "direct", "--rg", "-n", "theme", "src"]);
+  const zgLaunch = resolveZgCommand();
+  assert.deepEqual(calls[0]?.[1], [...zgLaunch.prefixArgs, "query", "--mode", "direct", "--rg", "-n", "theme", "src"]);
   assert.equal(result.output, "one\ntwo");
 });
 
@@ -157,11 +160,12 @@ test("zg status, index, and index drop use their expected commands", async () =>
   await statusZg(execute, { root: "app", checkReady: true }, "/work/repo");
   await indexZg(execute, { root: "app", rebuild: true }, "/work/repo");
   await dropIndexZg(execute, "app", "/work/repo");
+  const zgLaunch = resolveZgCommand();
   assert.deepEqual(calls.map((call) => call[1]), [
-    ["status", "--mode", "direct"],
-    ["status", "--mode", "direct", "--check-ready"],
-    ["index", "--mode", "direct", "--rebuild"],
-    ["index", "--mode", "direct", "--drop", "--yes"],
+    [...zgLaunch.prefixArgs, "status", "--mode", "direct"],
+    [...zgLaunch.prefixArgs, "status", "--mode", "direct", "--check-ready"],
+    [...zgLaunch.prefixArgs, "index", "--mode", "direct", "--rebuild"],
+    [...zgLaunch.prefixArgs, "index", "--mode", "direct", "--drop", "--yes"],
   ]);
 });
 
@@ -174,4 +178,47 @@ test("zg failures include command output and launch errors", async () => {
     searchZg(async () => { throw new Error("command not found"); }, { query: "theme persistence" }, "/work/repo"),
     /Unable to run zg.*command not found/,
   );
+});
+
+test("resolveZgCommand resolves global node module path on win32", () => {
+  const winAppData = "C:\\Users\\test\\AppData\\Roaming";
+  const expectedCli = `${winAppData}\\npm\\node_modules\\@zvec\\zvec-grep\\dist\\cli\\index.js`;
+
+  const appDataResolved = resolveZgCommand(
+    "win32",
+    { APPDATA: winAppData },
+    "C:\\Program Files\\nodejs\\node.exe",
+    (path) => path === expectedCli,
+  );
+  assert.deepEqual(appDataResolved, {
+    command: "C:\\Program Files\\nodejs\\node.exe",
+    prefixArgs: [expectedCli],
+  });
+
+  const userProfileResolved = resolveZgCommand(
+    "win32",
+    { USERPROFILE: "C:\\Users\\test" },
+    "C:\\Program Files\\nodejs\\node.exe",
+    (path) => path === expectedCli,
+  );
+  assert.deepEqual(userProfileResolved, {
+    command: "C:\\Program Files\\nodejs\\node.exe",
+    prefixArgs: [expectedCli],
+  });
+
+  const missingResolved = resolveZgCommand(
+    "win32",
+    { APPDATA: winAppData },
+    "C:\\Program Files\\nodejs\\node.exe",
+    () => false,
+  );
+  assert.deepEqual(missingResolved, {
+    command: "zg",
+    prefixArgs: [],
+  });
+});
+
+test("resolveZgCommand falls back to zg on non-win32 platforms", () => {
+  assert.deepEqual(resolveZgCommand("linux"), { command: "zg", prefixArgs: [] });
+  assert.deepEqual(resolveZgCommand("darwin"), { command: "zg", prefixArgs: [] });
 });

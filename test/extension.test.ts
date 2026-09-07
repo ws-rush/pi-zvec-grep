@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import extension from "../extensions/index.ts";
+import { resolveZgCommand } from "../src/zg.ts";
 
 type ExecResult = { stdout: string; stderr: string; code: number };
 type Tool = {
@@ -107,8 +108,10 @@ test("indexed search executes in the requested root and rejects invalid inputs",
     freshness: "wait_for_fresh",
   }, controller.signal, undefined, harness.ctx);
 
+  const zgLaunch = resolveZgCommand();
   assert.equal(result.content[0]?.text, "freshness: fresh\nsrc/theme.ts:12");
-  assert.deepEqual(harness.calls, [["zg", [
+  assert.deepEqual(harness.calls, [[zgLaunch.command, [
+    ...zgLaunch.prefixArgs,
     "query", "--mode", "direct", "authentication flow", "--fts", "AuthService", "--vector", "where access is denied", "--fuse", "--limit", "8",
     "--glob", "src/**", "--type", "ts", "--refresh", "wait",
   ], { cwd: "/project", signal: controller.signal, timeout: 600_000 }]]);
@@ -132,8 +135,9 @@ test("managed rg is shell-free, handles a bounded command, and rejects unsupport
     command: "rg -n -F 'loadTheme' -g '*.ts' src | head -2",
   }, undefined, undefined, harness.ctx);
 
+  const zgLaunch = resolveZgCommand();
   assert.equal(result.content[0]?.text, "one\ntwo");
-  assert.deepEqual(harness.calls[0]?.slice(0, 2), ["zg", ["query", "--mode", "direct", "--rg", "-n", "-F", "loadTheme", "-g", "*.ts", "src"]]);
+  assert.deepEqual(harness.calls[0]?.slice(0, 2), [zgLaunch.command, [...zgLaunch.prefixArgs, "query", "--mode", "direct", "--rg", "-n", "-F", "loadTheme", "-g", "*.ts", "src"]]);
   await assert.rejects(
     rg.execute("call", { root: "/project", command: "rg theme | sort" }, undefined, undefined, harness.ctx),
     /head -N/,
@@ -146,8 +150,9 @@ test("status passes check-ready and does not lose the Pi execution context", asy
 
   const result = await status.execute("call", { root: "/project", checkReady: true }, undefined, undefined, harness.ctx);
 
+  const zgLaunch = resolveZgCommand();
   assert.equal(result.content[0]?.text, "ready");
-  assert.deepEqual(harness.calls[0], ["zg", ["status", "--mode", "direct", "--check-ready"], {
+  assert.deepEqual(harness.calls[0], [zgLaunch.command, [...zgLaunch.prefixArgs, "status", "--mode", "direct", "--check-ready"], {
     cwd: "/project", signal: undefined, timeout: 600_000,
   }]);
 });
@@ -188,9 +193,10 @@ test("index tools require interactive visible confirmation before mutating an in
   }, undefined, undefined, harness.ctx);
   await drop.execute("call", { root: "/project" }, undefined, undefined, harness.ctx);
 
+  const zgLaunch = resolveZgCommand();
   assert.deepEqual(harness.calls.map((call) => call[1]), [
-    ["index", "--mode", "direct", "--embedding", "local/potion-code-16m-v2", "--rebuild", "--max-depth", "2", "--allow-remote"],
-    ["index", "--mode", "direct", "--drop", "--yes"],
+    [...zgLaunch.prefixArgs, "index", "--mode", "direct", "--embedding", "local/potion-code-16m-v2", "--rebuild", "--max-depth", "2", "--allow-remote"],
+    [...zgLaunch.prefixArgs, "index", "--mode", "direct", "--drop", "--yes"],
   ]);
   assert.equal(harness.confirmations.length, 3);
 });
@@ -231,10 +237,11 @@ test("slash commands delegate to the same direct CLI forms", async () => {
   await harness.commands.get("zg-rg")?.handler("rg -n theme src", harness.ctx);
   await harness.commands.get("zg-status")?.handler("/project --check-ready", harness.ctx);
 
+  const zgLaunch = resolveZgCommand();
   assert.deepEqual(harness.calls.map((call) => call[1]), [
-    ["query", "--mode", "direct", "theme persistence", "--limit", "8"],
-    ["query", "--mode", "direct", "--rg", "-n", "theme", "src"],
-    ["status", "--mode", "direct", "--check-ready"],
+    [...zgLaunch.prefixArgs, "query", "--mode", "direct", "theme persistence", "--limit", "8"],
+    [...zgLaunch.prefixArgs, "query", "--mode", "direct", "--rg", "-n", "theme", "src"],
+    [...zgLaunch.prefixArgs, "status", "--mode", "direct", "--check-ready"],
   ]);
   assert.deepEqual(harness.calls.map((call) => call[2].cwd), ["/workspace", "/workspace", "/project"]);
   assert.equal(harness.messages.length, 3);

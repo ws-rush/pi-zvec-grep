@@ -4,10 +4,23 @@
   "description": "Use zvec-grep semantic workspace search from Pi.",
   "type": "module",
   "license": "MIT",
-  "keywords": ["pi-package", "pi-extension", "zvec-grep", "pi-zg", "semantic-search"],
-  "files": ["extensions", "src", "assets", "README.md", "LICENSE"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "zvec-grep",
+    "pi-zg",
+    "semantic-search"
+  ],
+  "files": [
+    "extensions",
+    "src",
+    "assets",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node --experimental-strip-types --test test/*.test.ts",
+    "typecheck": "tsc --noEmit",
     "pack:check": "npm pack --dry-run"
   },
   "peerDependencies": {
@@ -15,7 +28,13 @@
     "typebox": "*"
   },
   "pi": {
-    "extensions": ["./extensions/index.ts"],
+    "extensions": [
+      "./extensions/index.ts"
+    ],
     "image": "./assets/pi-zvec-grep-preview.png"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "typescript": "^7.0.2"
   }
 }
